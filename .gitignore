@@ -1,0 +1,38 @@
+# Outputs & cache
+outputs/
+checkpoints/
+*.mp4
+*.wav
+*.mp3
+*.png
+*.jpg
+
+# Secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Models / binaries (download on remote)
+rife-ncnn-vulkan/
+models/weights/
+*.bin
+*.safetensors
+
+# IDE
+.idea/
+.vscode/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Original spec (large)
+Project3说明.pdf

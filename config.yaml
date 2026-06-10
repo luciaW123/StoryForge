@@ -1,0 +1,111 @@
+deepseek:
+  api_key: ${DEEPSEEK_API_KEY}
+  base_url: https://api.deepseek.com
+  model: deepseek-chat
+  temperature: 0.7
+  max_tokens: 4096
+  vision_model: deepseek-chat
+
+# -----------------------------------------------------------------------------
+# Image generation backend — FLUX.1-dev.
+# Provides the per-shot first frame (the CLIP-consistency anchor) used by
+# CogVideoX as the conditioning image.
+# -----------------------------------------------------------------------------
+flux:
+  model_id: /root/autodl-tmp/hf_cache/flux
+  num_inference_steps: 20
+  guidance_scale: 3.5
+  width: 1024
+  height: 576
+  dtype: bfloat16
+  enable_cpu_offload: false
+  offload_mode: none        # 100 GB VRAM — FLUX stays resident the whole run
+
+# -----------------------------------------------------------------------------
+# RIFE: kept for opt-in via FORCE_RIFE=1 env var. Not the default path.
+# -----------------------------------------------------------------------------
+rife:
+  executable: ./rife-ncnn-vulkan/rife-ncnn-vulkan
+  model: rife-v4.6
+  interpolation_factor: 4
+  gpu_id: 0
+
+# -----------------------------------------------------------------------------
+# CogVideoX (image-to-video) — the actual motion synthesizer.
+# Each shot becomes a 6-second video conditioned on its FLUX first frame +
+# its cinematographer-generated prompt.
+#
+# VRAM with offload=none: ~28 GB resident + ~30 GB VAE decode peak ≈ 60 GB
+# total. Fits 100 GB GPU with massive headroom.
+# Per-shot time: ~2.5-3 min for 49 frames at 50 steps (no offload overhead).
+# -----------------------------------------------------------------------------
+cogvideox:
+  model_id: /root/autodl-tmp/hf_cache/cogvideox    # local path — no HF download
+  num_inference_steps: 50
+  guidance_scale: 6.0
+  num_frames: 49            # 49 frames at 8 fps = ~6.1 seconds per shot
+  fps: 8
+  width: 720                # CogVideoX-5b-I2V's native input/output size
+  height: 480
+  dtype: bfloat16
+  offload_mode: none        # 100 GB VRAM — both models fully resident, fastest path
+
+tts:
+  enabled: true
+  voice: en-US-GuyNeural
+  speed_clamp: [0.75, 1.25]
+
+video:
+  target_fps: 24            # final video target — Post will resample CogVideoX's 8fps up
+  output_codec: libx264
+  output_bitrate: 8000k
+  width: 1920
+  height: 1080
+
+consistency:
+  # Level 1: CLIP cosine-similarity fast filter. Frames below this hard floor
+  # are rejected without consulting Gemini (saves API cost on obvious fails).
+  # Set to ~0.88 to let CLIP do quick rejection and let Gemini do nuanced work.
+  character_threshold: 0.88
+  scene_threshold: 0.85
+  max_retries_per_shot: 3
+
+  # Legacy DeepSeek-vision check — keep off (DeepSeek-chat is not a vision model).
+  use_deepseek_vision: false
+
+  # Level 2: deep vision check. Always runs alongside CLIP (both must pass).
+  # Choose ONE backend:
+  #   "local"  — Qwen2-VL-72B-Instruct-AWQ on local GPU. Default. ~39 GB VRAM.
+  #   "gemini" — cloud, Gemini 2.x Flash. Optional fallback. ~20 calls/day free.
+  #   "none"   — skip Level 2 entirely, CLIP-only gating.
+  vision_backend: local
+
+  # --- Gemini settings (used when vision_backend = "gemini") ---
+  gemini_enabled: false           # legacy; new code respects vision_backend instead
+  gemini_model: gemini-2.5-flash
+  gemini_api_key: ${GEMINI_API_KEY}
+
+  # --- Qwen2-VL local settings (used when vision_backend = "local") ---
+  # Model: Qwen/Qwen2-VL-72B-Instruct-GPTQ-Int4 (~40 GB resident)
+  # AWQ was abandoned: AutoAWQ is deprecated and its Triton kernel breaks on
+  # cu130 + Blackwell sm_120. GPTQ via gptqmodel works on the same stack.
+  # Pre-download with (ModelScope mirror also works):
+  #   hf download Qwen/Qwen2-VL-72B-Instruct-GPTQ-Int4 \
+  #       --local-dir /root/autodl-tmp/hf_cache/qwen2vl-72b-gptq-int4 \
+  #       --max-workers 8
+  local_vision_model_id: /root/autodl-tmp/hf_cache/qwen2vl-72b-gptq-int4
+  local_vision_offload: true      # delete model after each call; FLUX/CogVideoX reload next stage
+
+  # Batch topology: generate ALL keyframes with FLUX resident, then offload
+  # FLUX once and run the local VLM in a single resident session over all
+  # shots, amortizing its ~17 s load. Strongly recommended when Level-2
+  # backend is `local`. Set false for legacy per-shot interleaving (slower,
+  # easier to debug a single shot).
+  batch_mode: true
+
+pipeline:
+  checkpoint_dir: checkpoints
+  output_dir: outputs
+  max_scenes: 2             # small total shot count — CogVideoX is the cost driver
+  max_shots_per_scene: 2
+  log_level: INFO

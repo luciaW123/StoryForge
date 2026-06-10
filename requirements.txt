@@ -1,0 +1,56 @@
+# -----------------------------------------------------------------------------
+# PyTorch — install BEFORE the rest, with the CUDA wheel matched to your GPU.
+#
+# For RTX 5090 (Blackwell, sm_120):
+#     pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
+#         --index-url https://download.pytorch.org/whl/cu124
+#   (or PyTorch nightly with cu126 if 2.5/cu124 doesn't detect the GPU)
+#
+# For RTX 4090 / 3090 / 4080 (Ada/Ampere):
+#     pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
+#         --index-url https://download.pytorch.org/whl/cu121
+#
+# China mirror equivalent (Aliyun):
+#     --index-url https://mirrors.aliyun.com/pytorch-wheels/cu124
+# -----------------------------------------------------------------------------
+
+# Image generation
+# transformers must be <5.0 with torch 2.4.x (5.x needs torch.distributed.tensor.device_mesh,
+# which only exists in torch >=2.5). For torch 2.5+, transformers 4.46+ also works.
+diffusers==0.31.0          # 0.32+ registers FA3 custom ops that break with older torch
+transformers>=4.45.0,<5.0
+tokenizers>=0.20,<0.21
+accelerate>=0.34.0
+sentencepiece
+protobuf
+
+# Consistency checking
+open-clip-torch>=2.24.0
+
+# LLM API (OpenAI-compatible client used for DeepSeek)
+openai>=1.40.0
+
+# Gemini Vision (Consistency Agent Level-2 deep check — cloud backend)
+google-generativeai>=0.8.0
+google-genai>=0.3.0
+
+# Qwen2-VL local vision (Consistency Agent Level-2 deep check — local backend)
+# transformers already listed above; needs qwen-vl-utils for the image-resize helpers
+qwen-vl-utils>=0.0.8
+
+# TTS
+edge-tts>=6.1.10
+
+# Video processing
+moviepy==1.0.3
+opencv-python>=4.10.0
+
+# Data & utilities
+pydantic>=2.8.0
+pyyaml>=6.0.2
+pillow>=10.4.0
+numpy>=1.26.0
+scipy>=1.13.0
+tqdm>=4.66.0
+rich>=13.7.0
+typer>=0.12.0
